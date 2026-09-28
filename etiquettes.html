@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Étiquettes QR – SAV Froid</title>
+  <style>
+    /* Planche A4 : 3 colonnes × 8 lignes, étiquettes 70 × 37 mm */
+    @page { size: A4 portrait; margin: 0; }
+    :root { --lw: 70mm; --lh: 37mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #e9edf1; color: #111; }
+
+    .toolbar { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid #d5dbe1;
+      padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .toolbar h1 { font-size: 17px; margin: 0; flex: 1 1 200px; }
+    .toolbar label { font-size: 14px; color: #555; display: flex; align-items: center; gap: 6px; }
+    .toolbar input { width: 64px; padding: 6px; font-size: 15px; }
+    .toolbar button { background: #0b6bcb; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .tip { width: 100%; font-size: 13px; color: #666; margin: 0; }
+    #status { padding: 24px; text-align: center; color: #555; }
+
+    .sheet { width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+      padding: 0.5mm 0 0; display: grid; grid-template-columns: repeat(3, var(--lw)); grid-template-rows: repeat(8, var(--lh));
+      overflow: hidden; }
+    .label { width: var(--lw); height: var(--lh); padding: 2.5mm 3mm; display: flex; align-items: center; gap: 2.5mm; overflow: hidden; }
+    .label.blank { visibility: hidden; }
+    .show-grid .label:not(.blank) { outline: 0.2mm dashed #bbb; outline-offset: -0.1mm; }
+    .qr { width: 31mm; height: 31mm; flex: 0 0 31mm; }
+    .qr svg { width: 100%; height: 100%; display: block; }
+    .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1mm; }
+    .company { white-space: nowrap; font-size: 7pt; font-weight: 700; letter-spacing: .4pt; text-transform: uppercase; color: #333; }
+    .bid { font-size: 15pt; font-weight: 800; letter-spacing: .3pt; line-height: 1.05; white-space: nowrap; }
+    .gas { font-size: 12pt; font-weight: 700; }
+    .cap { font-size: 9pt; }
+    .foot { font-size: 6pt; color: #444; }
+
+    @media print {
+      body { background: #fff; }
+      .toolbar, #status { display: none !important; }
+      .sheet { margin: 0; box-shadow: none; break-after: page; page-break-after: always; }
+      .sheet:last-child { break-after: auto; page-break-after: auto; }
+      .show-grid .label { outline: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>Étiquettes QR · A4 3 × 8 (70 × 37 mm)</h1>
+    <label>Commencer à l'étiquette n° <input id="start" type="number" min="1" max="24" value="1"></label>
+    <label><input id="grid" type="checkbox" checked style="width:auto"> Contours à l'écran</label>
+    <button id="print" type="button">🖨️ Imprimer</button>
+    <p class="tip">À l'impression : format A4, marges « Aucune », échelle 100 % (désactiver « Ajuster à la page »). « Commencer à » permet de réutiliser une planche déjà entamée.</p>
+  </div>
+  <div id="status">Chargement…</div>
+  <div id="sheets" class="show-grid"></div>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script>
+  (async function () {
+    'use strict';
+    const PER_SHEET = 24;
+    const cfg = window.SAV_CONFIG || {};
+    const status = document.getElementById('status');
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    if (!cfg.SUPABASE_KEY || cfg.SUPABASE_KEY.startsWith('COLLER_ICI')) {
+      status.textContent = 'La clé Supabase n\'est pas configurée (config.js).';
+      return;
+    }
+    const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      status.innerHTML = 'Connecte-toi d\'abord sur <a href="./">l\'application</a>, puis relance l\'impression.';
+      return;
+    }
+
+    const ids = (new URLSearchParams(location.search).get('ids') || '')
+      .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+    if (!ids.length) { status.textContent = 'Aucune bouteille demandée.'; return; }
+
+    const { data, error } = await sb.from('bottles').select('id, gas_type, capacity_kg').in('id', ids);
+    if (error) { status.textContent = error.message; return; }
+    const byId = Object.fromEntries(data.map((b) => [b.id, b]));
+    const bottles = ids.map((id) => byId[id]).filter(Boolean);
+    if (!bottles.length) { status.textContent = 'Bouteilles introuvables.'; return; }
+
+    // Le QR contient l'adresse de l'appli + le n° : un scan avec l'appareil photo ouvre directement la fiche.
+    const appUrl = new URL('./', location.href).href;
+    function qrSvg(text) {
+      const qr = qrcode(0, 'M');
+      qr.addData(text);
+      qr.make();
+      return qr.createSvgTag({ cellSize: 4, margin: 8, scalable: true });
+    }
+    const qrCache = {};
+    bottles.forEach((b) => { qrCache[b.id] = qrSvg(`${appUrl}?b=${encodeURIComponent(b.id)}`); });
+
+    function labelHtml(b) {
+      const cap = b.capacity_kg == null ? '' : `${String(b.capacity_kg).replace('.', ',')} kg`;
+      return `<div class="label">
+        <div class="qr">${qrCache[b.id]}</div>
+        <div class="txt">
+          <div class="company">${esc(cfg.ENTREPRISE || 'SAV Froid')}</div>
+          <div class="bid">${esc(b.id)}</div>
+          <div class="gas">${esc(b.gas_type || '')}</div>
+          <div class="cap">${esc(cap)}</div>
+          <div class="foot">Scanner à chaque prise / retour</div>
+        </div>
+      </div>`;
+    }
+
+    function render() {
+      const start = Math.min(PER_SHEET, Math.max(1, parseInt(document.getElementById('start').value, 10) || 1));
+      const cells = Array(start - 1).fill(null).concat(bottles);
+      let html = '';
+      for (let i = 0; i < cells.length; i += PER_SHEET) {
+        const page = cells.slice(i, i + PER_SHEET);
+        html += '<div class="sheet">' + page.map((b) => (b ? labelHtml(b) : '<div class="label blank"></div>')).join('') + '</div>';
+      }
+      document.getElementById('sheets').innerHTML = html;
+      const n = Math.ceil(cells.length / PER_SHEET);
+      status.textContent = `${bottles.length} étiquette${bottles.length > 1 ? 's' : ''} · ${n} planche${n > 1 ? 's' : ''}`;
+    }
+
+    document.getElementById('start').addEventListener('input', render);
+    document.getElementById('grid').addEventListener('change', (e) => {
+      document.getElementById('sheets').classList.toggle('show-grid', e.target.checked);
+    });
+    document.getElementById('print').addEventListener('click', () => window.print());
+    render();
+  })();
+  </script>
+</body>
+</html>

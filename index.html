@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b6bcb">
+  <title>SAV Froid – Bouteilles</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>SAV Froid · Bouteilles</h1>
+    <span class="who" id="who"></span>
+    <button id="logout" class="hidden" type="button">Déconnexion</button>
+  </header>
+
+  <!-- Connexion -->
+  <section id="view-login" class="hidden">
+    <main>
+      <div class="card login-box">
+        <h2>Connexion</h2>
+        <form id="login-form">
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="username" required>
+          <label for="password">Mot de passe</label>
+          <input id="password" type="password" autocomplete="current-password" required>
+          <div id="login-error" class="msg error hidden"></div>
+          <p><button class="btn block" type="submit">Se connecter</button></p>
+        </form>
+      </div>
+    </main>
+  </section>
+
+  <!-- Application -->
+  <section id="view-app" class="hidden">
+    <nav class="tabs" id="tabs">
+      <button type="button" data-tab="scan" class="active">Scanner</button>
+      <button type="button" data-tab="camion">Mon camion</button>
+      <button type="button" data-tab="stock" class="admin-only">Stock</button>
+      <button type="button" data-tab="bouteilles" class="admin-only">Bouteilles &amp; étiquettes</button>
+      <button type="button" data-tab="historique" class="admin-only">Historique</button>
+      <button type="button" data-tab="equipe" class="admin-only">Équipe</button>
+    </nav>
+
+    <main>
+      <!-- Scanner -->
+      <div id="tab-scan" class="tab">
+        <div class="card">
+          <h2>Scanner une bouteille</h2>
+          <div id="reader"></div>
+          <div class="stack">
+            <button id="scan-start" class="btn block" type="button">📷 Scanner le QR code</button>
+            <button id="scan-stop" class="btn block secondary hidden" type="button">Arrêter la caméra</button>
+          </div>
+          <form id="manual-form" class="row" style="margin-top:14px">
+            <input id="manual-id" placeholder="ou saisir le n° : BTL-0001" autocapitalize="characters">
+            <button class="btn secondary" type="submit" style="flex:0 0 auto">OK</button>
+          </form>
+          <div id="scan-error" class="msg error hidden"></div>
+        </div>
+        <div id="scan-result"></div>
+      </div>
+
+      <!-- Mon camion -->
+      <div id="tab-camion" class="tab hidden">
+        <div class="card">
+          <h2>Bouteilles dans mon camion</h2>
+          <ul class="list" id="camion-list"></ul>
+        </div>
+      </div>
+
+      <!-- Stock (admin) -->
+      <div id="tab-stock" class="tab hidden">
+        <div class="stats" id="stock-stats"></div>
+        <div class="card">
+          <h2>Par technicien</h2>
+          <div id="stock-by-tech"></div>
+        </div>
+        <div class="card">
+          <h2>Toutes les bouteilles</h2>
+          <div class="row">
+            <input id="stock-search" placeholder="Rechercher (n°, gaz, technicien)">
+            <select id="stock-filter">
+              <option value="">Tous les statuts</option>
+              <option value="en_stock">Au stock</option>
+              <option value="chez_technicien">Dans un camion</option>
+              <option value="vide">Vide</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>N°</th><th>Gaz</th><th>Capacité</th><th>Statut</th><th>Chez</th></tr></thead>
+              <tbody id="stock-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bouteilles & étiquettes (admin) -->
+      <div id="tab-bouteilles" class="tab hidden">
+        <div class="card">
+          <h2>Ajouter des bouteilles</h2>
+          <p class="muted">Chaque bouteille reçoit un numéro unique (BTL-0001, BTL-0002…) et son étiquette QR.</p>
+          <form id="create-form">
+            <div class="row">
+              <div>
+                <label for="c-gas">Type de gaz</label>
+                <input id="c-gas" list="gas-list" required placeholder="ex : R32">
+                <datalist id="gas-list">
+                  <option value="R32"><option value="R410A"><option value="R404A"><option value="R134A">
+                  <option value="R407C"><option value="R449A"><option value="R452A"><option value="R448A">
+                  <option value="R513A"><option value="R1234YF"><option value="R290"><option value="R744">
+                </datalist>
+              </div>
+              <div>
+                <label for="c-cap">Capacité (kg)</label>
+                <input id="c-cap" type="number" step="0.1" min="0" required placeholder="ex : 10">
+              </div>
+              <div>
+                <label for="c-count">Nombre</label>
+                <input id="c-count" type="number" min="1" max="200" value="1" required>
+              </div>
+            </div>
+            <div id="create-error" class="msg error hidden"></div>
+            <p><button class="btn" type="submit">Créer les bouteilles</button></p>
+          </form>
+          <div id="create-result"></div>
+        </div>
+
+        <div class="card">
+          <h2>Imprimer des étiquettes</h2>
+          <p class="muted">Coche les bouteilles puis imprime sur une planche A4 de 24 étiquettes (3 × 8, 70 × 37 mm).</p>
+          <div class="row" style="margin-bottom:8px">
+            <button id="labels-all" class="btn small secondary" type="button" style="flex:0 0 auto">Tout cocher</button>
+            <button id="labels-none" class="btn small secondary" type="button" style="flex:0 0 auto">Tout décocher</button>
+            <span></span>
+            <button id="labels-print" class="btn small" type="button" style="flex:0 0 auto">Imprimer la sélection</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>N°</th><th>Gaz</th><th>Capacité</th><th>Créée le</th></tr></thead>
+              <tbody id="labels-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Historique (admin) -->
+      <div id="tab-historique" class="tab hidden">
+        <div class="card">
+          <h2>Derniers mouvements</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Bouteille</th><th>Mouvement</th><th>Technicien</th><th>Note</th></tr></thead>
+              <tbody id="history-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Équipe (admin) -->
+      <div id="tab-equipe" class="tab hidden">
+        <div class="card">
+          <h2>Équipe</h2>
+          <p class="muted">Les comptes se créent dans Supabase (Authentication &gt; Users &gt; Add user). Ils apparaissent ici automatiquement ; tu peux corriger le nom affiché et le rôle.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Nom affiché</th><th>Rôle</th><th></th></tr></thead>
+              <tbody id="team-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <div id="config-error" class="hidden">
+    <main><div class="card msg error">
+      La clé Supabase n'est pas configurée. Ouvre <b>config.js</b> dans le dépôt GitHub et colle la clé
+      « Publishable » (sb_publishable_…) à la place de COLLER_ICI_LA_CLE_PUBLISHABLE.
+    </div></main>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
