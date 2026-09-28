@@ -4,6 +4,6 @@
 // Ne JAMAIS mettre ici la clé secrète (sb_secret_…) : ce fichier est public.
 window.SAV_CONFIG = {
   SUPABASE_URL: 'https://isvfwrxwlpphjrbzqvjf.supabase.co',
-  SUPABASE_KEY: 'COLLER_ICI_LA_CLE_PUBLISHABLE',
+  SUPABASE_KEY: 'sb_publishable_e8hvW6I1cckouaR6gHk1Aw_uiVK8JII',
   ENTREPRISE: 'BOREANA',
 };
